@@ -1,0 +1,23 @@
+{
+  "name": "koru-city-collector",
+  "version": "1.0.0",
+  "description": "Collects Primero Koru Kari data for Preili and Madona every 5 minutes.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Lincis-deve/studdybuddy.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Lincis-deve/studdybuddy/issues"
+  },
+  "homepage": "https://github.com/Lincis-deve/studdybuddy#readme",
+  "dependencies": {
+    "express": "^5.2.1"
+  }
+}

@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Preiļi & Madona Data Collector</title>
+    <style>
+      :root {
+        font-family: Inter, Arial, sans-serif;
+      }
+      body {
+        margin: 0;
+        background: #f5f7fb;
+        color: #172133;
+      }
+      .container {
+        max-width: 1100px;
+        margin: 0 auto;
+        padding: 24px 16px 40px;
+      }
+      h1 {
+        margin: 0 0 8px;
+      }
+      .subtitle {
+        margin: 0 0 18px;
+        color: #455268;
+      }
+      .toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        align-items: center;
+        margin-bottom: 16px;
+      }
+      button {
+        border: 0;
+        background: #0a66ff;
+        color: white;
+        border-radius: 8px;
+        padding: 10px 14px;
+        cursor: pointer;
+        font-weight: 600;
+      }
+      button:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+      .cards {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 12px;
+        margin-bottom: 18px;
+      }
+      .card {
+        background: white;
+        border-radius: 12px;
+        padding: 14px;
+        border: 1px solid #e3e8f3;
+      }
+      .city {
+        font-size: 18px;
+        font-weight: 700;
+      }
+      .candidate {
+        margin-top: 6px;
+        font-weight: 600;
+      }
+      .votes {
+        margin-top: 6px;
+        color: #2b4b87;
+      }
+      .muted {
+        color: #6b778c;
+        font-size: 13px;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        background: white;
+        border: 1px solid #e3e8f3;
+        border-radius: 12px;
+        overflow: hidden;
+      }
+      th,
+      td {
+        text-align: left;
+        padding: 10px 12px;
+        border-bottom: 1px solid #eef1f7;
+      }
+      th {
+        background: #f8faff;
+        font-size: 13px;
+      }
+      tr:last-child td {
+        border-bottom: 0;
+      }
+      .status {
+        font-size: 14px;
+        color: #33415c;
+      }
+      .error {
+        color: #b42318;
+      }
+      .ok {
+        color: #166534;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>Preiļi & Madona Collector</h1>
+      <p class="subtitle">
+        Source page:
+        <a href="https://www.primero.lv/korukari/rezultati" target="_blank" rel="noreferrer"
+          >primero.lv/korukari/rezultati</a
+        >
+      </p>
+
+      <div class="toolbar">
+        <button id="collectBtn">Collect now</button>
+        <span class="status" id="statusText">Loading...</span>
+      </div>
+
+      <div class="cards" id="latestCards"></div>
+
+      <h2>Collected history</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Collected at</th>
+            <th>City</th>
+            <th>Candidate</th>
+            <th>Votes</th>
+            <th>Eliminated</th>
+          </tr>
+        </thead>
+        <tbody id="historyBody"></tbody>
+      </table>
+    </div>
+
+    <script>
+      const statusText = document.getElementById("statusText");
+      const collectBtn = document.getElementById("collectBtn");
+      const latestCards = document.getElementById("latestCards");
+      const historyBody = document.getElementById("historyBody");
+
+      const cityOrder = ["Preiļi", "Madona"];
+
+      function formatDate(dateStr) {
+        if (!dateStr) return "-";
+        return new Date(dateStr).toLocaleString();
+      }
+
+      function escapeHtml(value) {
+        return String(value ?? "")
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;");
+      }
+
+      async function refreshStatus() {
+        const response = await fetch("/api/status");
+        const data = await response.json();
+        const ok = data.lastError ? "error" : "ok";
+        statusText.className = `status ${ok}`;
+
+        const intervalMinutes = (data.pollIntervalMs / 1000 / 60).toFixed(0);
+        statusText.textContent = data.lastError
+          ? `Last error: ${data.lastError.message} (${formatDate(data.lastError.at)})`
+          : `Auto-collect every ${intervalMinutes} min | Last success: ${formatDate(
+              data.lastSuccessAt
+            )} | Total snapshots: ${data.totalSnapshots}`;
+      }
+
+      function renderLatest(latest) {
+        latestCards.innerHTML = "";
+        if (!latest || !latest.records) {
+          latestCards.innerHTML =
+            '<div class="card"><p class="muted">No data collected yet.</p></div>';
+          return;
+        }
+
+        const ordered = [...latest.records].sort(
+          (a, b) => cityOrder.indexOf(a.city) - cityOrder.indexOf(b.city)
+        );
+
+        for (const record of ordered) {
+          const card = document.createElement("div");
+          card.className = "card";
+
+          if (!record.found) {
+            card.innerHTML = `
+              <div class="city">${escapeHtml(record.city)}</div>
+              <div class="muted">No matching candidate found in source data.</div>
+              <div class="muted">Collected: ${formatDate(latest.collectedAt)}</div>
+            `;
+          } else {
+            card.innerHTML = `
+              <div class="city">${escapeHtml(record.city)}</div>
+              <div class="candidate">${escapeHtml(record.candidateName)}</div>
+              <div class="votes">Votes: ${escapeHtml(record.verifiedVotesCount)}</div>
+              <div class="muted">Eliminated: ${record.isEliminated ? "Yes" : "No"}</div>
+              <div class="muted">Collected: ${formatDate(latest.collectedAt)}</div>
+            `;
+          }
+
+          latestCards.appendChild(card);
+        }
+      }
+
+      function renderHistory(snapshots) {
+        historyBody.innerHTML = "";
+        for (const snapshot of snapshots) {
+          for (const record of snapshot.records || []) {
+            const tr = document.createElement("tr");
+            tr.innerHTML = `
+              <td>${formatDate(snapshot.collectedAt)}</td>
+              <td>${escapeHtml(record.city)}</td>
+              <td>${escapeHtml(record.candidateName || "-")}</td>
+              <td>${escapeHtml(record.verifiedVotesCount ?? "-")}</td>
+              <td>${record.isEliminated === true ? "Yes" : record.isEliminated === false ? "No" : "-"}</td>
+            `;
+            historyBody.appendChild(tr);
+          }
+        }
+      }
+
+      async function loadData() {
+        const [latestResponse, snapshotsResponse] = await Promise.all([
+          fetch("/api/latest"),
+          fetch("/api/snapshots?limit=80"),
+        ]);
+
+        const latestData = await latestResponse.json();
+        const snapshotsData = await snapshotsResponse.json();
+
+        renderLatest(latestData.latest);
+        renderHistory(snapshotsData.snapshots || []);
+      }
+
+      collectBtn.addEventListener("click", async () => {
+        collectBtn.disabled = true;
+        collectBtn.textContent = "Collecting...";
+        try {
+          await fetch("/api/collect", { method: "POST" });
+          await Promise.all([refreshStatus(), loadData()]);
+        } finally {
+          collectBtn.disabled = false;
+          collectBtn.textContent = "Collect now";
+        }
+      });
+
+      async function boot() {
+        await Promise.all([refreshStatus(), loadData()]);
+      }
+
+      boot();
+      setInterval(boot, 15000);
+    </script>
+  </body>
+</html>
