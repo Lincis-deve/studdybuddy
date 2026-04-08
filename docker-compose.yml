@@ -1,0 +1,16 @@
+version: "3.9"
+
+services:
+  collector:
+    build: .
+    container_name: koru-city-collector
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+    volumes:
+      - collector_data:/app/data
+    restart: unless-stopped
+
+volumes:
+  collector_data:

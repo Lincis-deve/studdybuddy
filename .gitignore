@@ -1,0 +1,5 @@
+node_modules/
+data/snapshots.json
+tmp_*.html
+tmp_*.js
+tmp_*.json
