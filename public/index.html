@@ -73,6 +73,26 @@
         color: #6b778c;
         font-size: 13px;
       }
+      .chart-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+        gap: 12px;
+        margin-bottom: 18px;
+      }
+      .chart-card {
+        background: white;
+        border: 1px solid #e3e8f3;
+        border-radius: 12px;
+        padding: 12px;
+      }
+      .chart-title {
+        margin: 0 0 10px;
+        font-size: 15px;
+      }
+      .chart-wrap {
+        position: relative;
+        height: 280px;
+      }
       table {
         width: 100%;
         border-collapse: collapse;
@@ -123,6 +143,21 @@
 
       <div class="cards" id="latestCards"></div>
 
+      <div class="chart-grid">
+        <div class="chart-card">
+          <h2 class="chart-title">Votes over time</h2>
+          <div class="chart-wrap">
+            <canvas id="votesChart"></canvas>
+          </div>
+        </div>
+        <div class="chart-card">
+          <h2 class="chart-title">Vote change per collection</h2>
+          <div class="chart-wrap">
+            <canvas id="growthChart"></canvas>
+          </div>
+        </div>
+      </div>
+
       <h2>Collected history</h2>
       <table>
         <thead>
@@ -138,13 +173,22 @@
       </table>
     </div>
 
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
     <script>
       const statusText = document.getElementById("statusText");
       const collectBtn = document.getElementById("collectBtn");
       const latestCards = document.getElementById("latestCards");
       const historyBody = document.getElementById("historyBody");
+      const votesChartCanvas = document.getElementById("votesChart");
+      const growthChartCanvas = document.getElementById("growthChart");
+      let votesChart = null;
+      let growthChart = null;
 
       const cityOrder = ["Preiļi", "Madona"];
+      const cityColor = {
+        Preiļi: "#2563eb",
+        Madona: "#16a34a",
+      };
 
       function formatDate(dateStr) {
         if (!dateStr) return "-";
@@ -225,6 +269,91 @@
         }
       }
 
+      function getVotesByCity(snapshot, city) {
+        const record = (snapshot.records || []).find((item) => item.city === city);
+        if (!record || !record.found) {
+          return null;
+        }
+        const value = Number(record.verifiedVotesCount);
+        return Number.isFinite(value) ? value : null;
+      }
+
+      function buildChartSeries(snapshots) {
+        const chronological = [...snapshots].reverse();
+        const labels = chronological.map((snapshot) => formatDate(snapshot.collectedAt));
+
+        const valuesByCity = {};
+        for (const city of cityOrder) {
+          valuesByCity[city] = chronological.map((snapshot) => getVotesByCity(snapshot, city));
+        }
+
+        const growthByCity = {};
+        for (const city of cityOrder) {
+          let previous = null;
+          growthByCity[city] = valuesByCity[city].map((current) => {
+            if (current == null || previous == null) {
+              previous = current;
+              return null;
+            }
+            const growth = current - previous;
+            previous = current;
+            return growth;
+          });
+        }
+
+        return { labels, valuesByCity, growthByCity };
+      }
+
+      function renderCharts(snapshots) {
+        if (!window.Chart) return;
+        const { labels, valuesByCity, growthByCity } = buildChartSeries(snapshots);
+
+        const voteDatasets = cityOrder.map((city) => ({
+          label: city,
+          data: valuesByCity[city],
+          borderColor: cityColor[city],
+          backgroundColor: cityColor[city],
+          borderWidth: 2,
+          tension: 0.25,
+          spanGaps: true,
+        }));
+
+        const growthDatasets = cityOrder.map((city) => ({
+          label: city,
+          data: growthByCity[city],
+          borderColor: cityColor[city],
+          backgroundColor: cityColor[city] + "66",
+          borderWidth: 2,
+          tension: 0.2,
+          spanGaps: true,
+        }));
+
+        if (votesChart) votesChart.destroy();
+        if (growthChart) growthChart.destroy();
+
+        votesChart = new Chart(votesChartCanvas, {
+          type: "line",
+          data: { labels, datasets: voteDatasets },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: "index", intersect: false },
+            plugins: { legend: { position: "top" } },
+          },
+        });
+
+        growthChart = new Chart(growthChartCanvas, {
+          type: "bar",
+          data: { labels, datasets: growthDatasets },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: "index", intersect: false },
+            plugins: { legend: { position: "top" } },
+          },
+        });
+      }
+
       async function loadData() {
         const [latestResponse, snapshotsResponse] = await Promise.all([
           fetch("/api/latest"),
@@ -235,7 +364,9 @@
         const snapshotsData = await snapshotsResponse.json();
 
         renderLatest(latestData.latest);
-        renderHistory(snapshotsData.snapshots || []);
+        const snapshots = snapshotsData.snapshots || [];
+        renderHistory(snapshots);
+        renderCharts(snapshots);
       }
 
       collectBtn.addEventListener("click", async () => {

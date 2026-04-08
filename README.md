@@ -24,6 +24,27 @@ Open:
 http://localhost:3000
 ```
 
+## Docker
+
+### Build and run with Docker
+
+```bash
+docker build -t koru-city-collector .
+docker run --rm -p 3000:3000 -v "$(pwd)/data:/app/data" koru-city-collector
+```
+
+### Run with Docker Compose
+
+```bash
+docker compose up --build -d
+```
+
+Stop:
+
+```bash
+docker compose down
+```
+
 ## Data storage
 
 Collected snapshots are saved in:
@@ -31,6 +52,15 @@ Collected snapshots are saved in:
 ```text
 data/snapshots.json
 ```
+
+When running in Docker Compose, this path is persisted via a bind mount to `./data`.
+
+## Charts
+
+The dashboard includes two charts:
+
+- **Votes over time** (Preiļi and Madona lines)
+- **Vote change per snapshot** (how many votes were added since previous collection)
 
 ## API endpoints
 
